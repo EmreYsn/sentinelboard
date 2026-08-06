@@ -1,0 +1,73 @@
+# SentinelBoard — Global Configuration
+# Her modül bu dosyadan kendi ayarlarını okur.
+# .env dosyasındaki değerler buradaki varsayılanları override eder.
+
+collector:
+  # Hangi log dosyalarını izleyeceğiz
+  sources:
+    - name: auth
+      path: /var/log/auth.log
+      type: syslog
+      enabled: true
+
+    - name: syslog
+      path: /var/log/syslog
+      type: syslog
+      enabled: true
+
+    - name: nginx_access
+      path: /var/log/nginx/access.log
+      type: nginx_combined
+      enabled: true
+
+    - name: nginx_error
+      path: /var/log/nginx/error.log
+      type: nginx_error
+      enabled: false
+
+  # Collector'ın logları Redis'e gönderme davranışı
+  batch_size: 100        # Kaç log biriktikten sonra gönder
+  flush_interval: 5      # Veya kaç saniyede bir gönder (hangisi önce dolarsa)
+
+parser:
+  # Normalleştirme ayarları
+  timezone: UTC
+  max_field_length: 4096  # Çok uzun field'ları kes (DoS koruması)
+
+engine:
+  # Korelasyon motoru
+  rules_dir: engine/rules/
+  evaluation_interval: 10  # Kuralları kaç saniyede bir çalıştır
+  window_default: 300      # Varsayılan zaman penceresi (saniye) — 5 dakika
+
+ml:
+  # ML anomali tespiti
+  baseline_days: 7          # Kaç günlük veriyle baseline oluştur
+  anomaly_threshold: 2.5    # Z-score eşiği (bu değerin üstü = anomali)
+  retrain_interval: 86400   # Modeli kaç saniyede bir yeniden eğit (24 saat)
+  features:
+    - hourly_event_count     # Saatlik olay sayısı
+    - unique_source_ips      # Benzersiz kaynak IP sayısı
+    - auth_failure_ratio     # Başarısız/başarılı giriş oranı
+    - new_process_count      # Yeni görülen process sayısı
+
+alerts:
+  # Bildirim ayarları
+  cooldown: 300             # Aynı kural için tekrar alert arasındaki minimum süre
+  channels:
+    telegram:
+      enabled: true
+    email:
+      enabled: false
+  severity_levels:
+    - info        # Bilgilendirme — dashboard'da göster
+    - low         # Düşük — logla
+    - medium      # Orta — dashboard + email
+    - high        # Yüksek — dashboard + telegram
+    - critical    # Kritik — dashboard + telegram + email
+
+dashboard:
+  # Web arayüzü
+  websocket_enabled: true
+  log_retention_days: 90     # 90 günden eski logları temizle
+  max_results_per_page: 100

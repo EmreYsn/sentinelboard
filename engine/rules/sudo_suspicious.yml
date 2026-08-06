@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────
+# Suspicious Sudo Usage
+# ─────────────────────────────────────────────────────────────
+# Kısa sürede çok fazla sudo komutu → ya saldırgan privilege
+# escalation yapıyor ya da compromised bir hesap var.
+# Normal bir admin saatte 2-3 sudo kullanır, 5 dakikada 5+
+# çok şüpheli.
+# ─────────────────────────────────────────────────────────────
+
+title: Suspicious Sudo Activity
+id: sentinel-004
+status: active
+description: >
+  Detects unusual volume of sudo commands that may indicate
+  privilege escalation or a compromised account.
+level: high
+
+tags:
+  - attack.privilege_escalation
+  - attack.t1548
+
+logsource:
+  product: linux
+  service: auth
+
+detection:
+  selection:
+    event_type: sudo_command
+  condition: selection | count(user) > 5
+  timeframe: 5m
+
+response:
+  alert: true
+  severity: high
+  message: "Suspicious sudo activity: {count} commands by {user}"
+
+falsepositives:
+  - System administrators during maintenance
+  - Automated deployment scripts
+
+author: Yasin Emre
+date: 2026/07/25
+references:
+  - https://attack.mitre.org/techniques/T1548/

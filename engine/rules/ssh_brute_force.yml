@@ -1,0 +1,70 @@
+# ─────────────────────────────────────────────────────────────
+# SSH Brute Force Detection Rule
+# ─────────────────────────────────────────────────────────────
+# Bu kural ne yapar?
+#   Aynı IP'den kısa sürede çok fazla başarısız SSH girişi
+#   gelirse alert üretir. Bu en yaygın saldırı türlerinden biri.
+#
+# Gerçek dünyada ne olur?
+#   Saldırgan bir IP'den (genellikle bot) binlerce kullanıcı adı
+#   ve şifre kombinasyonu dener. Her başarısız deneme auth.log'a
+#   "Failed password" olarak düşer. 5 dakikada 10+ deneme
+#   neredeyse kesinlikle otomatik bir saldırıdır.
+# ─────────────────────────────────────────────────────────────
+
+title: SSH Brute Force Detection
+id: sentinel-001
+status: active
+description: >
+  Detects potential SSH brute force attacks by identifying
+  multiple failed authentication attempts from the same source IP
+  within a short time window.
+
+# Severity seviyeleri: info < low < medium < high < critical
+level: high
+
+# MITRE ATT&CK Mapping
+# T1110 = Brute Force, TA0006 = Credential Access
+# Bu mapping sayesinde saldırıyı uluslararası bir framework'e
+# oturtuyoruz — CV'de ve raporlarda çok iyi durur
+tags:
+  - attack.credential_access
+  - attack.t1110
+
+# Hangi log kaynağına bakacağız
+logsource:
+  product: linux
+  service: auth
+
+# Tespit koşulları
+detection:
+  # 1. Hangi olayları arıyoruz?
+  selection:
+    event_type: auth_failure
+    process: sshd
+
+  # 2. Ne zaman tetiklensin?
+  # Aynı src_ip'den 5 dakika içinde 10'dan fazla eşleşme
+  condition: selection | count(src_ip) > 10
+  timeframe: 5m
+
+# Alert tetiklendiğinde ne yapılsın
+response:
+  alert: true
+  severity: high
+  message: "SSH brute force detected: {count} failed attempts from {src_ip} in {timeframe}"
+  actions:
+    - notify_telegram
+    - log_to_dashboard
+
+# Yanlış pozitif (false positive) notları
+falsepositives:
+  - Legitimate users who forgot their password
+  - Automated deployment scripts with expired credentials
+  - Monitoring tools doing health checks
+
+# Kural meta bilgileri
+author: Yasin Emre
+date: 2026/06/09
+references:
+  - https://attack.mitre.org/techniques/T1110/

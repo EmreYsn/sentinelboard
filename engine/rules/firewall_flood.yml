@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────
+# Firewall Block Flood Detection
+# ─────────────────────────────────────────────────────────────
+# Aynı IP'den çok fazla firewall block olayı → port scan
+# veya servis taraması yapılıyor demektir.
+# ─────────────────────────────────────────────────────────────
+
+title: Firewall Block Flood (Possible Port Scan)
+id: sentinel-003
+status: active
+description: >
+  Detects a high volume of firewall block events from a single IP,
+  indicating possible port scanning or service enumeration.
+level: medium
+
+tags:
+  - attack.reconnaissance
+  - attack.t1046
+
+logsource:
+  product: linux
+  service: syslog
+
+detection:
+  selection:
+    event_type: firewall_block
+  condition: selection | count(src_ip) > 20
+  timeframe: 5m
+
+response:
+  alert: true
+  severity: medium
+  message: "Possible port scan: {count} blocked connections from {src_ip}"
+
+falsepositives:
+  - Misconfigured applications trying to reach blocked ports
+  - Network monitoring tools
+
+author: Yasin Emre
+date: 2026/07/25
+references:
+  - https://attack.mitre.org/techniques/T1046/

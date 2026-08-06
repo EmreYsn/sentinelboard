@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables (NEVER commit secrets)
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Django
+*.sqlite3
+db.sqlite3
+staticfiles/
+media/
+
+# ML model artifacts (too large for git)
+ml/models/*.pkl
+ml/models/*.joblib
+ml/models/*.pt
+
+# Logs (ironic, but we don't want local test logs in the repo)
+*.log
+logs/
+
+# Docker volumes
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+htmlcov/
+.coverage

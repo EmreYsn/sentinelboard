@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelBoard — SIEM Dashboard</title>
+
+    <!-- React via CDN — kurulum gerektirmez -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- Babel: JSX'i tarayıcıda JavaScript'e çevirir -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+    <style>
+        /* ── CSS Variables: Tüm renkler tek yerden yönetilir ── */
+        :root {
+            --bg-primary: #0f1923;
+            --bg-secondary: #1a2332;
+            --bg-card: #1e2d3d;
+            --bg-hover: #243447;
+            --text-primary: #e0e6ed;
+            --text-secondary: #8899a6;
+            --text-muted: #5c6e7e;
+            --border: #2a3a4a;
+            --accent: #00d4aa;
+            --accent-hover: #00f0c0;
+            --severity-critical: #ff4757;
+            --severity-high: #ff6b35;
+            --severity-medium: #ffa502;
+            --severity-low: #3498db;
+            --severity-info: #636e72;
+            --status-new: #ff6b35;
+            --status-ack: #3498db;
+            --status-resolved: #00d4aa;
+            --status-fp: #636e72;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-brand h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        .header-brand .shield { font-size: 24px; }
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ── Navigation Tabs ── */
+        .nav-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+        }
+        .nav-tab {
+            padding: 10px 20px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-tab:hover { color: var(--text-primary); }
+        .nav-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* ── Main Content ── */
+        .main { padding: 20px 24px; }
+
+        /* ── Stat Cards ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        .stat-card .sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .stat-card.alert-card .value { color: var(--severity-high); }
+        .stat-card.ok-card .value { color: var(--accent); }
+
+        /* ── Filters ── */
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-input, .filter-select {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+        .filter-input:focus, .filter-select:focus {
+            border-color: var(--accent);
+        }
+        .filter-input { width: 250px; }
+        .filter-btn {
+            padding: 8px 16px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .filter-btn:hover { background: var(--accent-hover); }
+        .filter-btn.secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        /* ── Table ── */
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        thead th {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 10px 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+        tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+        tbody tr:hover { background: var(--bg-hover); }
+        tbody tr:last-child td { border-bottom: none; }
+
+        /* ── Severity Badge ── */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-critical { background: rgba(255,71,87,0.15); color: var(--severity-critical); }
+        .badge-high { background: rgba(255,107,53,0.15); color: var(--severity-high); }
+        .badge-medium { background: rgba(255,165,2,0.15); color: var(--severity-medium); }
+        .badge-low { background: rgba(52,152,219,0.15); color: var(--severity-low); }
+        .badge-info { background: rgba(99,110,114,0.15); color: var(--severity-info); }
+
+        /* ── Status Badge ── */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-new { background: rgba(255,107,53,0.15); color: var(--status-new); }
+        .status-acknowledged { background: rgba(52,152,219,0.15); color: var(--status-ack); }
+        .status-resolved { background: rgba(0,212,170,0.15); color: var(--status-resolved); }
+        .status-false_positive { background: rgba(99,110,114,0.15); color: var(--status-fp); }
+
+        /* ── Alert Actions ── */
+        .action-btn {
+            padding: 3px 8px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-left: 4px;
+        }
+        .action-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ── IP Link ── */
+        .ip-link {
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .ip-link:hover { text-decoration: underline; }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .page-btn {
+            padding: 6px 14px;
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .page-btn:hover { border-color: var(--accent); }
+        .page-btn:disabled { opacity: 0.3; cursor: default; }
+
+        /* ── Loading ── */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        .spinner {
+            display: inline-block;
+            width: 24px; height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Top IPs ── */
+        .top-ips {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .ip-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .ip-card h3 {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .ip-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .ip-row:last-child { border-bottom: none; }
+        .ip-bar-container {
+            flex: 1;
+            margin: 0 12px;
+            height: 6px;
+            background: var(--bg-hover);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .ip-bar {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+        }
+        .ip-count {
+            font-size: 12px;
+            color: var(--text-secondary);
+            min-width: 30px;
+            text-align: right;
+        }
+
+        /* ── Severity Chart ── */
+        .chart-bars {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            height: 100px;
+            margin-top: 12px;
+        }
+        .chart-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .chart-bar {
+            width: 100%;
+            border-radius: 4px 4px 0 0;
+            min-height: 4px;
+            transition: height 0.3s;
+        }
+        .chart-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .chart-value {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+{% verbatim %}
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const API_BASE = '/api';
+
+/* ── Yardımcı Fonksiyonlar ── */
+function severityClass(s) { return `badge badge-${s}`; }
+function statusClass(s) { return `status-badge status-${s}`; }
+function timeAgo(dateStr) {
+    const diff = (Date.now() - new Date(dateStr)) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    return `${Math.floor(diff/86400)}d ago`;
+}
+
+/* ── Stat Card ── */
+function StatCard({ label, value, sub, type }) {
+    const cls = type === 'alert' ? 'stat-card alert-card'
+              : type === 'ok' ? 'stat-card ok-card'
+              : 'stat-card';
+    return (
+        <div className={cls}>
+            <div className="label">{label}</div>
+            <div className="value">{value}</div>
+            {sub && <div className="sub">{sub}</div>}
+        </div>
+    );
+}
+
+/* ── Overview Tab ── */
+function OverviewTab({ stats, loading }) {
+    if (loading) return <div className="loading"><div className="spinner"></div><br/>Loading...</div>;
+    if (!stats) return null;
+
+    const maxIpCount = stats.top_source_ips?.length > 0
+        ? Math.max(...stats.top_source_ips.map(i => i.count)) : 1;
+
+    const sevColors = {
+        critical: 'var(--severity-critical)',
+        high: 'var(--severity-high)',
+        medium: 'var(--severity-medium)',
+        low: 'var(--severity-low)',
+        info: 'var(--severity-info)'
+    };
+    const sevEntries = Object.entries(stats.events_by_severity || {});
+    const maxSev = sevEntries.length > 0 ? Math.max(...sevEntries.map(e => e[1])) : 1;
+
+    return (
+        <div>
+            <div className="stats-grid">
+                <StatCard label="Total Events" value={stats.total_events} sub="All time" />
+                <StatCard label="Events (1h)" value={stats.events_last_hour} sub="Last hour" type="ok" />
+                <StatCard label="New Alerts" value={stats.new_alerts} sub={`${stats.total_alerts} total`} type={stats.new_alerts > 0 ? 'alert' : 'ok'} />
+                <StatCard label="High/Critical" value={stats.high_severity_alerts} sub="Unresolved" type={stats.high_severity_alerts > 0 ? 'alert' : 'ok'} />
+            </div>
+
+            <div className="top-ips">
+                <div className="ip-card">
+                    <h3>Top Source IPs (24h)</h3>
+                    {stats.top_source_ips?.length > 0 ? stats.top_source_ips.map((ip, i) => (
+                        <div key={i} className="ip-row">
+                            <span className="ip-link">{ip.ip}</span>
+                            <div className="ip-bar-container">
+                                <div className="ip-bar" style={{width: `${(ip.count/maxIpCount)*100}%`}}></div>
+                            </div>
+                            <span className="ip-count">{ip.count}</span>
+                        </div>
+                    )) : <div className="empty-state">No data</div>}
+                </div>
+
+                <div className="ip-card">
+                    <h3>Events by Severity (24h)</h3>
+                    <div className="chart-bars">
+                        {['info','low','medium','high','critical'].map(sev => {
+                            const count = stats.events_by_severity?.[sev] || 0;
+                            return (
+                                <div key={sev} className="chart-col">
+                                    <div className="chart-value">{count}</div>
+                                    <div className="chart-bar" style={{
+                                        height: `${maxSev > 0 ? (count/maxSev)*80 : 0}px`,
+                                        background: sevColors[sev]
+                                    }}></div>
+                                    <div className="chart-label">{sev}</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="ip-card">
+                    <h3>Events by Source (24h)</h3>
+                    {Object.entries(stats.events_by_source || {}).length > 0 ? (
+                        <div className="chart-bars">
+                            {Object.entries(stats.events_by_source).map(([src, count]) => {
+                                const srcMax = Math.max(...Object.values(stats.events_by_source));
+                                return (
+                                    <div key={src} className="chart-col">
+                                        <div className="chart-value">{count}</div>
+                                        <div className="chart-bar" style={{
+                                            height: `${srcMax > 0 ? (count/srcMax)*80 : 0}px`,
+                                            background: 'var(--accent)'
+                                        }}></div>
+                                        <div className="chart-label">{src}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : <div className="empty-state">No data</div>}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── Events Tab ── */
+function EventsTab() {
+    const [events, setEvents] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState({ severity: '', source: '', search: '' });
+    const [page, setPage] = useState({ next: null, prev: null, count: 0 });
+    const [url, setUrl] = useState(`${API_BASE}/events/`);
+
+    const fetchEvents = useCallback(async (fetchUrl) => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (filters.severity) params.set('severity', filters.severity);
+            if (filters.source) params.set('source', filters.source);
+            if (filters.search) params.set('search', filters.search);
+            const sep = fetchUrl.includes('?') ? '&' : '?';
+            const fullUrl = params.toString() ? `${fetchUrl}${sep}${params}` : fetchUrl;
+            const res = await fetch(fullUrl);
+            const data = await res.json();
+            setEvents(data.results || []);
+            setPage({ next: data.next, prev: data.previous, count: data.count || 0 });
+        } catch (e) { console.error(e); }
+        setLoading(false);
+    }, [filters]);
+
+    useEffect(() => { fetchEvents(url); }, [url]);
+
+    const applyFilters = () => { setUrl(`${API_BASE}/events/`); fetchEvents(`${API_BASE}/events/`); };
+    const clearFilters = () => { setFilters({ severity: '', source: '', search: '' }); setUrl(`${API_BASE}/events/`); fetchEvents(`${API_BASE}/events/`); };
+
+    return (
+        <div>
+            <div className="filters">
+                <input className="filter-input" placeholder="Search events..." value={filters.search}
+                    onChange={e => setFilters({...filters, search: e.target.value})}
+                    onKeyDown={e => e.key === 'Enter' && applyFilters()} />
+                <select className="filter-select" value={filters.severity}
+                    onChange={e => { setFilters({...filters, severity: e.target.value}); }}>
+                    <option value="">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="info">Info</option>
+                </select>
+                <select className="filter-select" value={filters.source}
+                    onChange={e => { setFilters({...filters, source: e.target.value}); }}>
+                    <option value="">All Sources</option>
+                    <option value="auth">Auth</option>
+                    <option value="nginx">Nginx</option>
+                    <option value="syslog">Syslog</option>
+                </select>
+                <button className="filter-btn" onClick={applyFilters}>Filter</button>
+                <button className="filter-btn secondary" onClick={clearFilters}>Clear</button>
+            </div>
+
+            <div className="table-container">
+                {loading ? <div className="loading"><div className="spinner"></div></div> : (
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Severity</th>
+                                <th>Source</th>
+                                <th>Type</th>
+                                <th>Source IP</th>
+                                <th>User</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {events.length === 0 ? (
+                                <tr><td colSpan="7" className="empty-state">No events found</td></tr>
+                            ) : events.map(ev => (
+                                <tr key={ev.id}>
+                                    <td title={ev.timestamp}>{timeAgo(ev.timestamp)}</td>
+                                    <td><span className={severityClass(ev.severity)}>{ev.severity}</span></td>
+                                    <td>{ev.source}</td>
+                                    <td>{ev.event_type}</td>
+                                    <td>{ev.src_ip ? <span className="ip-link">{ev.src_ip}</span> : '-'}</td>
+                                    <td>{ev.user || '-'}</td>
+                                    <td>{ev.message || ev.raw?.substring(0, 80)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+                <div className="pagination">
+                    <span>{page.count} events</span>
+                    <div>
+                        <button className="page-btn" disabled={!page.prev}
+                            onClick={() => page.prev && setUrl(page.prev)}>← Prev</button>
+                        {' '}
+                        <button className="page-btn" disabled={!page.next}
+                            onClick={() => page.next && setUrl(page.next)}>Next →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── Alerts Tab ── */
+function AlertsTab() {
+    const [alerts, setAlerts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [statusFilter, setStatusFilter] = useState('');
+    const [analyzing, setAnalyzing] = useState(null);
+    const [analysis, setAnalysis] = useState(null);
+
+    const fetchAlerts = async () => {
+        setLoading(true);
+        try {
+            const params = statusFilter ? `?status=${statusFilter}` : '';
+            const res = await fetch(`${API_BASE}/alerts/${params}`);
+            const data = await res.json();
+            setAlerts(data.results || []);
+        } catch (e) { console.error(e); }
+        setLoading(false);
+    };
+
+    useEffect(() => { fetchAlerts(); }, [statusFilter]);
+
+    const updateStatus = async (id, newStatus) => {
+        try {
+            await fetch(`${API_BASE}/alerts/${id}/status/`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            fetchAlerts();
+        } catch (e) { console.error(e); }
+    };
+
+    const analyzeAlert = async (id) => {
+        setAnalyzing(id);
+        setAnalysis(null);
+        try {
+            const res = await fetch(`${API_BASE}/alerts/${id}/analyze/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await res.json();
+            setAnalysis(data);
+        } catch (e) {
+            setAnalysis({ success: false, error: 'Request failed' });
+        }
+        setAnalyzing(null);
+    };
+
+    return (
+        <div>
+            <div className="filters">
+                <select className="filter-select" value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value)}>
+                    <option value="">All Status</option>
+                    <option value="new">New</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="false_positive">False Positive</option>
+                </select>
+            </div>
+
+            {analysis && (
+                <div style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    marginBottom: '16px',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: '1.6',
+                    fontSize: '13px',
+                }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '12px',
+                    }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '14px' }}>
+                            🤖 LLM Analysis
+                        </span>
+                        <button className="action-btn" onClick={() => setAnalysis(null)}>✕ Close</button>
+                    </div>
+                    {analysis.success ? (
+                        <div style={{ color: 'var(--text-primary)' }}>{analysis.analysis}</div>
+                    ) : (
+                        <div style={{ color: 'var(--severity-high)' }}>Error: {analysis.error}</div>
+                    )}
+                </div>
+            )}
+
+            <div className="table-container">
+                {loading ? <div className="loading"><div className="spinner"></div></div> : (
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Severity</th>
+                                <th>Rule</th>
+                                <th>Source IP</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {alerts.length === 0 ? (
+                                <tr><td colSpan="7" className="empty-state">No alerts found</td></tr>
+                            ) : alerts.map(alert => (
+                                <tr key={alert.id}>
+                                    <td title={alert.created_at}>{timeAgo(alert.created_at)}</td>
+                                    <td><span className={severityClass(alert.severity)}>{alert.severity}</span></td>
+                                    <td>{alert.rule_title}</td>
+                                    <td>{alert.src_ip ? <span className="ip-link">{alert.src_ip}</span> : '-'}</td>
+                                    <td>{alert.message?.substring(0, 100)}</td>
+                                    <td><span className={statusClass(alert.status)}>{alert.status}</span></td>
+                                    <td>
+                                        <button
+                                            className="action-btn"
+                                            style={{borderColor: 'var(--accent)', color: 'var(--accent)'}}
+                                            onClick={() => analyzeAlert(alert.id)}
+                                            disabled={analyzing === alert.id}
+                                        >
+                                            {analyzing === alert.id ? '...' : '🤖 AI'}
+                                        </button>
+                                        {alert.status === 'new' && (
+                                            <button className="action-btn" onClick={() => updateStatus(alert.id, 'acknowledged')}>ACK</button>
+                                        )}
+                                        {(alert.status === 'new' || alert.status === 'acknowledged') && (
+                                            <button className="action-btn" onClick={() => updateStatus(alert.id, 'resolved')}>Resolve</button>
+                                        )}
+                                        {alert.status !== 'false_positive' && (
+                                            <button className="action-btn" onClick={() => updateStatus(alert.id, 'false_positive')}>FP</button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ── Ana Uygulama ── */
+function App() {
+    const [tab, setTab] = useState('overview');
+    const [stats, setStats] = useState(null);
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    useEffect(() => {
+        fetch(`${API_BASE}/stats/`)
+            .then(r => r.json())
+            .then(d => { setStats(d); setStatsLoading(false); })
+            .catch(() => setStatsLoading(false));
+
+        // 30 saniyede bir güncelle
+        const interval = setInterval(() => {
+            fetch(`${API_BASE}/stats/`).then(r => r.json()).then(setStats).catch(() => {});
+        }, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div>
+            <header className="header">
+                <div className="header-brand">
+                    <span className="shield">🛡️</span>
+                    <h1>SentinelBoard</h1>
+                </div>
+                <div className="header-status">
+                    <div className="status-dot"></div>
+                    System Active
+                </div>
+            </header>
+
+            <nav className="nav-tabs">
+                <div className={`nav-tab ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')}>Overview</div>
+                <div className={`nav-tab ${tab === 'events' ? 'active' : ''}`} onClick={() => setTab('events')}>Events</div>
+                <div className={`nav-tab ${tab === 'alerts' ? 'active' : ''}`} onClick={() => setTab('alerts')}>Alerts</div>
+            </nav>
+
+            <main className="main">
+                {tab === 'overview' && <OverviewTab stats={stats} loading={statsLoading} />}
+                {tab === 'events' && <EventsTab />}
+                {tab === 'alerts' && <AlertsTab />}
+            </main>
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+{% endverbatim %}
+</body>
+</html>

@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ──────────────────────────────────
+  # Logların kalıcı olarak saklandığı veritabanı.
+  # JSON sorgulama desteği sayesinde normalleştirilmiş logları
+  # verimli şekilde filtreleyip sorgulayabiliyoruz.
+  db:
+    image: postgres:16-alpine
+    container_name: sentinel_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinelboard
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────
+  # İki ayrı görevi var:
+  # 1) Message queue: Collector → Parser arasında log tamponu
+  # 2) Channel layer: Django Channels WebSocket backend
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
