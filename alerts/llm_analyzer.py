@@ -1,17 +1,3 @@
-"""
-llm_analyzer.py — LLM ile alert analizi (Google Gemini)
-
-Google Gemini API nedir?
-    Google'ın LLM'i. Ücretsiz katmanı var ve güvenlik
-    analizi için gayet yeterli. REST API ile çalışıyor —
-    tek bir HTTP POST isteği ile yanıt alıyorsun.
-
-Neden Gemini?
-    - Ücretsiz katman: dakikada 15 istek, yeterli
-    - Türkçe desteği iyi
-    - API kullanımı çok basit
-"""
-
 import os
 import logging
 
@@ -22,13 +8,11 @@ load_dotenv()
 
 logger = logging.getLogger("sentinelboard.alerts.llm_analyzer")
 
-API_KEY = os.getenv("GEMINI_API_KEY", "")
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+API_KEY = os.getenv("GROQ_API_KEY", "")
+API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-def build_analysis_prompt(alert, events=None) -> str:
-    """Alert ve event verilerinden LLM prompt'u oluşturur."""
-
+def build_analysis_prompt(alert, events=None):
     event_summary = ""
     if events:
         event_list = list(events[:10])
@@ -43,84 +27,68 @@ def build_analysis_prompt(alert, events=None) -> str:
         if events.count() > 10:
             event_summary += f"\n  ... and {events.count() - 10} more events"
 
-    prompt = f"""Sen deneyimli bir SOC (Security Operations Center) analistisin. SentinelBoard SIEM sisteminden gelen bir güvenlik alert'ini inceliyorsun.
+    prompt = f"""Sen deneyimli bir SOC analistisin. SentinelBoard SIEM sisteminden gelen bir guvenlik alertini inceliyorsun.
 
-## Alert Detayları
-- **Kural:** {alert.rule_title}
-- **Kural ID:** {alert.rule_id}
-- **Severity:** {alert.severity}
-- **Kaynak IP:** {alert.src_ip or 'N/A'}
-- **Kullanıcı:** {alert.user or 'N/A'}
-- **Mesaj:** {alert.message}
-- **MITRE ATT&CK Tags:** {', '.join(alert.tags) if alert.tags else 'Yok'}
-- **Zaman:** {alert.created_at}
+## Alert Detaylari
+- Kural: {alert.rule_title}
+- Kural ID: {alert.rule_id}
+- Severity: {alert.severity}
+- Kaynak IP: {alert.src_ip or 'N/A'}
+- Kullanici: {alert.user or 'N/A'}
+- Mesaj: {alert.message}
+- MITRE ATT&CK Tags: {', '.join(alert.tags) if alert.tags else 'Yok'}
+- Zaman: {alert.created_at}
 
-## İlgili Event'ler
-{event_summary if event_summary else 'Event detayı mevcut değil.'}
+## Ilgili Eventler
+{event_summary if event_summary else 'Event detayi mevcut degil.'}
 
 ## Analiz Talebi
-Lütfen aşağıdaki yapıda Türkçe bir güvenlik analizi yap:
+Turkce bir guvenlik analizi yap:
 
-1. **Özet**: Bu alert'in kısa ve net açıklaması (2-3 cümle)
+1. **Ozet**: Bu alertin kisa aciklamasi (2-3 cumle)
+2. **Tehdit Degerlendirmesi**: Bu aktivite neden supheli? Saldirgan ne yapmaya calisiyor olabilir?
+3. **Risk Seviyesi**: Dusuk / Orta / Yuksek / Kritik — ve neden?
+4. **Onerilen Aksiyonlar**: Ne yapilmali? (en az 3 adim)
+5. **False Positive Degerlendirmesi**: Bu alertin false positive olma olasiligi nedir?
 
-2. **Tehdit Değerlendirmesi**: Bu aktivite neden şüpheli? Saldırgan ne yapmaya çalışıyor olabilir? MITRE ATT&CK framework'üne göre bu hangi saldırı aşamasına denk geliyor?
-
-3. **Risk Seviyesi**: Düşük / Orta / Yüksek / Kritik — ve neden bu seviye?
-
-4. **Önerilen Aksiyonlar**: SOC analisti olarak ne yapılmalı? (en az 3 somut adım)
-
-5. **False Positive Değerlendirmesi**: Bu alert'in false positive olma olasılığı nedir ve nasıl doğrulanır?
-
-Kısa, öz ve aksiyon odaklı yaz."""
+Kisa, oz ve aksiyon odakli yaz. Sadece Turkce yaz, baska dil kullanma."""
 
     return prompt
 
 
-def analyze_alert(alert) -> dict:
-    """
-    Bir alert'i Gemini ile analiz eder.
-
-    Gemini API formatı:
-        POST /v1beta/models/gemini-2.0-flash:generateContent?key=API_KEY
-        Body: { "contents": [{ "parts": [{ "text": "prompt" }] }] }
-
-    Yanıt formatı:
-        { "candidates": [{ "content": { "parts": [{ "text": "yanıt" }] } }] }
-    """
+def analyze_alert(alert):
     if not API_KEY:
         return {
             "success": False,
             "analysis": "",
-            "error": "GEMINI_API_KEY is not set in .env file"
+            "error": "GROQ_API_KEY is not set in .env file"
         }
 
-    # İlgili event'leri çek
     events = alert.related_events.all().order_by("-timestamp")
     prompt = build_analysis_prompt(alert, events)
 
     try:
         response = requests.post(
-            f"{API_URL}?key={API_KEY}",
-            headers={"Content-Type": "application/json"},
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            },
             json={
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "maxOutputTokens": 1500,
-                    "temperature": 0.3,
-                }
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 1500,
+                "temperature": 0.3,
             },
             timeout=30,
         )
 
         if response.status_code == 200:
             data = response.json()
-            # Gemini yanıt formatı
-            analysis_text = data["candidates"][0]["content"]["parts"][0]["text"]
-
+            analysis_text = data["choices"][0]["message"]["content"]
             logger.info(f"LLM analysis completed for alert {alert.id}")
-
             return {
                 "success": True,
                 "analysis": analysis_text,
@@ -136,15 +104,7 @@ def analyze_alert(alert) -> dict:
             }
 
     except requests.exceptions.Timeout:
-        return {
-            "success": False,
-            "analysis": "",
-            "error": "API request timed out (30s)"
-        }
+        return {"success": False, "analysis": "", "error": "API request timed out"}
     except Exception as e:
         logger.error(f"LLM analysis error: {e}")
-        return {
-            "success": False,
-            "analysis": "",
-            "error": str(e),
-        }
+        return {"success": False, "analysis": "", "error": str(e)}

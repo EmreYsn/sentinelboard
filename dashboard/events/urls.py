@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from events.views import (
     EventViewSet, AlertViewSet, dashboard_stats,
-    dashboard_view, analyze_alert_view,
+    dashboard_view, analyze_alert_view, chat_view,
 )
 
 router = DefaultRouter()
@@ -15,4 +15,5 @@ urlpatterns = [
     path("stats/", dashboard_stats, name="dashboard-stats"),
     path("alerts/<uuid:alert_id>/analyze/", analyze_alert_view, name="analyze-alert"),
     path("", include(router.urls)),
+    path("chat/", chat_view, name="chat"),
 ]

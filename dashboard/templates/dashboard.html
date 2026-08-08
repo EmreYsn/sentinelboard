@@ -387,6 +387,7 @@
 <div id="root"></div>
 
 {% verbatim %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script type="text/babel">
 const { useState, useEffect, useCallback } = React;
 
@@ -688,7 +689,7 @@ function AlertsTab() {
                         <button className="action-btn" onClick={() => setAnalysis(null)}>✕ Close</button>
                     </div>
                     {analysis.success ? (
-                        <div style={{ color: 'var(--text-primary)' }}>{analysis.analysis}</div>
+                        <div style={{ color: 'var(--text-primary)' }} dangerouslySetInnerHTML={{ __html: marked.parse(analysis.analysis) }}></div>
                     ) : (
                         <div style={{ color: 'var(--severity-high)' }}>Error: {analysis.error}</div>
                     )}
@@ -749,7 +750,124 @@ function AlertsTab() {
     );
 }
 
-/* ── Ana Uygulama ── */
+function ChatPanel() {
+    const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
+
+    const sendMessage = async () => {
+        if (!input.trim() || loading) return;
+
+        const userMsg = { role: 'user', text: input };
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setLoading(true);
+
+        try {
+            const res = await fetch(`${API_BASE}/chat/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: input }),
+            });
+            const data = await res.json();
+            const botMsg = {
+                role: 'bot',
+                text: data.success ? data.answer : `Hata: ${data.error}`,
+            };
+            setMessages(prev => [...prev, botMsg]);
+        } catch (e) {
+            setMessages(prev => [...prev, { role: 'bot', text: 'Baglanti hatasi' }]);
+        }
+        setLoading(false);
+    };
+
+    if (!isOpen) {
+        return (
+            <div onClick={() => setIsOpen(true)} style={{
+                position: 'fixed', bottom: '20px', right: '20px',
+                width: '56px', height: '56px', borderRadius: '50%',
+                background: 'var(--accent)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: '24px',
+                boxShadow: '0 4px 12px rgba(0,212,170,0.3)',
+            }}>🤖</div>
+        );
+    }
+
+    return (
+        <div style={{
+            position: 'fixed', bottom: '20px', right: '20px',
+            width: '380px', height: '500px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px', display: 'flex',
+            flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            zIndex: 1000,
+        }}>
+            <div style={{
+                padding: '12px 16px', borderBottom: '1px solid var(--border)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+                <span style={{ color: 'var(--accent)', fontWeight: 700 }}>🤖 Security Assistant</span>
+                <button className="action-btn" onClick={() => setIsOpen(false)}>✕</button>
+            </div>
+
+            <div style={{
+                flex: 1, overflowY: 'auto', padding: '12px',
+                display: 'flex', flexDirection: 'column', gap: '8px',
+            }}>
+                {messages.length === 0 && (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>
+                        Guvenlik sorularinizi sorun:<br/><br/>
+                        <em>"Son 1 saatte neler oldu?"</em><br/>
+                        <em>"En tehlikeli alert hangisi?"</em><br/>
+                        <em>"185.220.101.34 hakkinda ne biliyorsun?"</em>
+                    </div>
+                )}
+                {messages.map((msg, i) => (
+                    <div key={i} style={{
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                        background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-card)',
+                        color: msg.role === 'user' ? 'var(--bg-primary)' : 'var(--text-primary)',
+                        padding: '8px 12px', borderRadius: '8px',
+                        maxWidth: '85%', fontSize: '13px', lineHeight: '1.5',
+                    }}>
+                        {msg.role === 'bot' ? (
+                            <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) }}></div>
+                        ) : msg.text}
+                    </div>
+                ))}
+                {loading && (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                        <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div> Dusunuyor...
+                    </div>
+                )}
+            </div>
+
+            <div style={{
+                padding: '12px', borderTop: '1px solid var(--border)',
+                display: 'flex', gap: '8px',
+            }}>
+                <input
+                    style={{
+                        flex: 1, background: 'var(--bg-card)', border: '1px solid var(--border)',
+                        color: 'var(--text-primary)', padding: '8px 12px',
+                        borderRadius: '6px', fontSize: '13px', outline: 'none',
+                    }}
+                    placeholder="Soru sorun..."
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                />
+                <button className="filter-btn" onClick={sendMessage} disabled={loading}>
+                    Sor
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function App() {
     const [tab, setTab] = useState('overview');
     const [stats, setStats] = useState(null);
@@ -761,7 +879,6 @@ function App() {
             .then(d => { setStats(d); setStatsLoading(false); })
             .catch(() => setStatsLoading(false));
 
-        // 30 saniyede bir güncelle
         const interval = setInterval(() => {
             fetch(`${API_BASE}/stats/`).then(r => r.json()).then(setStats).catch(() => {});
         }, 30000);
@@ -792,6 +909,8 @@ function App() {
                 {tab === 'events' && <EventsTab />}
                 {tab === 'alerts' && <AlertsTab />}
             </main>
+
+            <ChatPanel />
         </div>
     );
 }
