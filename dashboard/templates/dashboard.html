@@ -510,6 +510,8 @@ function EventsTab() {
     const [filters, setFilters] = useState({ severity: '', source: '', search: '' });
     const [page, setPage] = useState({ next: null, prev: null, count: 0 });
     const [url, setUrl] = useState(`${API_BASE}/events/`);
+    const [explaining, setExplaining] = useState(null);
+    const [explanation, setExplanation] = useState(null);
 
     const fetchEvents = useCallback(async (fetchUrl) => {
         setLoading(true);
@@ -532,6 +534,22 @@ function EventsTab() {
 
     const applyFilters = () => { setUrl(`${API_BASE}/events/`); fetchEvents(`${API_BASE}/events/`); };
     const clearFilters = () => { setFilters({ severity: '', source: '', search: '' }); setUrl(`${API_BASE}/events/`); fetchEvents(`${API_BASE}/events/`); };
+
+    const explainEvent = async (id) => {
+        setExplaining(id);
+        setExplanation(null);
+        try {
+            const res = await fetch(`${API_BASE}/events/${id}/explain/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await res.json();
+            setExplanation({ id, ...data });
+        } catch (e) {
+            setExplanation({ id, success: false, error: 'Request failed' });
+        }
+        setExplaining(null);
+    };
 
     return (
         <div>
@@ -559,6 +577,34 @@ function EventsTab() {
                 <button className="filter-btn secondary" onClick={clearFilters}>Clear</button>
             </div>
 
+            {explanation && (
+                <div style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '16px',
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px',
+                    }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>🤖 Event Explanation</span>
+                        <button className="action-btn" onClick={() => setExplanation(null)}>✕ Close</button>
+                    </div>
+                    {explanation.success ? (
+                        <div style={{ color: 'var(--text-primary)' }}
+                            dangerouslySetInnerHTML={{ __html: marked.parse(explanation.explanation) }}></div>
+                    ) : (
+                        <div style={{ color: 'var(--severity-high)' }}>Hata: {explanation.error}</div>
+                    )}
+                </div>
+            )}
+
             <div className="table-container">
                 {loading ? <div className="loading"><div className="spinner"></div></div> : (
                     <table>
@@ -571,13 +617,16 @@ function EventsTab() {
                                 <th>Source IP</th>
                                 <th>User</th>
                                 <th>Message</th>
+                                <th>AI</th>
                             </tr>
                         </thead>
                         <tbody>
                             {events.length === 0 ? (
-                                <tr><td colSpan="7" className="empty-state">No events found</td></tr>
+                                <tr><td colSpan="8" className="empty-state">No events found</td></tr>
                             ) : events.map(ev => (
-                                <tr key={ev.id}>
+                                <tr key={ev.id} style={{
+                                    background: explanation?.id === ev.id ? 'var(--bg-hover)' : 'transparent',
+                                }}>
                                     <td title={ev.timestamp}>{timeAgo(ev.timestamp)}</td>
                                     <td><span className={severityClass(ev.severity)}>{ev.severity}</span></td>
                                     <td>{ev.source}</td>
@@ -585,6 +634,16 @@ function EventsTab() {
                                     <td>{ev.src_ip ? <span className="ip-link">{ev.src_ip}</span> : '-'}</td>
                                     <td>{ev.user || '-'}</td>
                                     <td>{ev.message || ev.raw?.substring(0, 80)}</td>
+                                    <td>
+                                        <button
+                                            className="action-btn"
+                                            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                                            onClick={() => explainEvent(ev.id)}
+                                            disabled={explaining === ev.id}
+                                        >
+                                            {explaining === ev.id ? '...' : '🤖'}
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

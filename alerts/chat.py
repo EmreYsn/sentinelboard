@@ -217,3 +217,54 @@ Yukaridaki verilere dayanarak soruyu yanitla."""
         return {"success": False, "answer": "", "error": "API timeout"}
     except Exception as e:
         return {"success": False, "answer": "", "error": str(e)}
+
+def explain_event(event) -> dict:
+    """
+    Tek bir event'i kısa ve öz şekilde açıklar.
+    Alert analizi gibi uzun değil — 2-3 cümlelik açıklama.
+    """
+    if not API_KEY:
+        return {"success": False, "explanation": "", "error": "GROQ_API_KEY not set"}
+
+    prompt = f"""Sen bir SOC analistisin. Asagidaki SIEM eventini 2-3 cumlede acikla:
+- Bu event ne anlama geliyor?
+- Tehlikeli mi, normal mi?
+- Varsa onerilen aksiyon
+
+Event:
+- Tip: {event.event_type}
+- Kaynak: {event.source}
+- Severity: {event.severity}
+- IP: {event.src_ip or 'N/A'}
+- Kullanici: {event.user or 'N/A'}
+- Process: {event.process or 'N/A'}
+- Mesaj: {event.message or event.raw[:150]}
+- Zaman: {event.timestamp}
+
+Sadece Turkce yaz. Cok kisa ve oz tut, maksimum 3 cumle."""
+
+    try:
+        response = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200,
+                "temperature": 0.3,
+            },
+            timeout=15,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            text = data["choices"][0]["message"]["content"]
+            return {"success": True, "explanation": text, "error": None}
+        else:
+            return {"success": False, "explanation": "", "error": f"API error {response.status_code}"}
+
+    except Exception as e:
+        return {"success": False, "explanation": "", "error": str(e)}

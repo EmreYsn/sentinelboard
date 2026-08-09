@@ -8,7 +8,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from alerts.llm_analyzer import analyze_alert
-from alerts.chat import chat
+from alerts.chat import chat, explain_event
 
 from events.models import Event, Alert
 from events.serializers import (
@@ -164,6 +164,15 @@ def chat_view(request):
     if not question:
         return Response({"error": "Question is required"}, status=status.HTTP_400_BAD_REQUEST)
     result = chat(question)
+    return Response(result)
+
+@api_view(["POST"])
+def explain_event_view(request, event_id):
+    try:
+        event = Event.objects.get(id=event_id)
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+    result = explain_event(event)
     return Response(result)
 
 def dashboard_view(request):
