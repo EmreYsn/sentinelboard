@@ -1,0 +1,19 @@
+# Collector test yapilandirmasi — ornek log dosyalarini okur.
+# Proje kokunden calistirin:
+#   python -m collector.worker --config tests/sample_logs/settings.yaml --dry-run --once
+collector:
+  sources:
+    - name: auth
+      path: tests/sample_logs/auth.log
+      type: syslog
+      enabled: true
+
+    - name: syslog
+      path: tests/sample_logs/syslog.log
+      type: syslog
+      enabled: true
+
+    - name: nginx_access
+      path: tests/sample_logs/nginx_access.log
+      type: nginx_combined
+      enabled: true
