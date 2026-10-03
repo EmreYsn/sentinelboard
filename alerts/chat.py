@@ -29,6 +29,7 @@ logger = logging.getLogger("sentinelboard.alerts.chat")
 
 API_KEY = os.getenv("GROQ_API_KEY", "")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 
 def gather_context(question: str) -> str:
@@ -193,7 +194,7 @@ Yukaridaki verilere dayanarak soruyu yanitla."""
                 "Content-Type": "application/json",
             },
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": MODEL,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -251,7 +252,7 @@ Sadece Turkce yaz. Cok kisa ve oz tut, maksimum 3 cumle."""
                 "Content-Type": "application/json",
             },
             json={
-                "model": "qwen/qwen3.8-27b",
+                "model": MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 200,
                 "temperature": 0.3,

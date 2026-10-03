@@ -10,6 +10,7 @@ logger = logging.getLogger("sentinelboard.alerts.llm_analyzer")
 
 API_KEY = os.getenv("GROQ_API_KEY", "")
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 
 def build_analysis_prompt(alert, events=None):
@@ -75,7 +76,7 @@ def analyze_alert(alert):
                 "Content-Type": "application/json",
             },
             json={
-                "model": "qwen/qwen3.8-27b",
+                "model": MODEL,
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
