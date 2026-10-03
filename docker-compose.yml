@@ -1,32 +1,13 @@
-version: "3.9"
+# SentinelBoard — yerel geliştirme bağımlılıkları
+#
+# Sadece Redis içerir. Django tarafı SQLite kullandığı için
+# ayrı bir veritabanı servisine ihtiyaç yoktur.
+#
+# Kullanım:  docker compose up -d
 
 services:
-  # ── PostgreSQL ──────────────────────────────────
-  # Logların kalıcı olarak saklandığı veritabanı.
-  # JSON sorgulama desteği sayesinde normalleştirilmiş logları
-  # verimli şekilde filtreleyip sorgulayabiliyoruz.
-  db:
-    image: postgres:16-alpine
-    container_name: sentinel_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: sentinelboard
-      POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelboard"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ── Redis ───────────────────────────────────────
-  # İki ayrı görevi var:
-  # 1) Message queue: Collector → Parser arasında log tamponu
-  # 2) Channel layer: Django Channels WebSocket backend
+  # Collector → Parser arasındaki log kuyruğu (Redis Streams).
   redis:
     image: redis:7-alpine
     container_name: sentinel_redis
@@ -42,5 +23,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
   redis_data:

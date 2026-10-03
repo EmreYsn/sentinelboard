@@ -1,33 +1,24 @@
 # ── Core Framework ──────────────────────────────
-Django>=5.0,<6.0              # Web framework — backend, ORM, admin
+Django>=5.2,<6.1              # Web framework — backend, ORM, admin
 djangorestframework>=3.15     # REST API endpoints for the dashboard
-django-cors-headers>=4.3      # Allow frontend (React) to talk to backend
-
-# ── Database ────────────────────────────────────
-psycopg2-binary>=2.9          # PostgreSQL adapter for Python
+django-cors-headers>=4.3      # CORS headers for the dashboard frontend
+gunicorn>=22.0                # WSGI server — production deployment
 
 # ── Redis & Message Queue ───────────────────────
-redis>=5.0                    # Redis client — our message queue
-django-redis>=5.4             # Redis cache backend for Django
-
-# ── Real-time (WebSocket) ──────────────────────
-channels>=4.0                 # Django Channels — WebSocket support
-channels-redis>=4.2           # Redis backend for Channels layer
+redis>=5.0                    # Redis client — collector→parser stream
 
 # ── Log Collection ──────────────────────────────
 watchdog>=4.0                 # File system watcher — detects new log lines
 
-# ── Parsing ─────────────────────────────────────
-python-dateutil>=2.9          # Robust timestamp parsing
+# ── Parsing & Config ────────────────────────────
 pyyaml>=6.0                   # YAML parsing for config & Sigma rules
 
 # ── ML / Anomaly Detection ─────────────────────
-numpy>=1.26                   # Numerical computation foundation
-pandas>=2.2                   # Data manipulation & time series
-scikit-learn>=1.4             # ML models (Isolation Forest, etc.)
+numpy>=1.26                   # Numerical computation (Z-score, Isolation Forest)
+scikit-learn>=1.4             # ML models — Isolation Forest
 
-# ── Alerts ──────────────────────────────────────
-python-telegram-bot>=21.0     # Telegram bot for alert notifications
+# ── Alerts & LLM ────────────────────────────────
+requests>=2.31                # HTTP client — Telegram Bot API & Groq API
 
 # ── Configuration ───────────────────────────────
 python-dotenv>=1.0            # Load .env file into environment
