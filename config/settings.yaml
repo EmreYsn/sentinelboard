@@ -14,6 +14,15 @@ collector:
       path: /var/log/syslog
       type: syslog
       enabled: true
+      # Bu desenlerden birine uyan satir hic islenmez.
+      ignore:
+        # SentinelBoard'un kendi loglari. Filtrelenmezse sistem kendi
+        # ciktisini olay olarak yutar ve sonmeyen bir geri besleme
+        # dongusu olusur: yaz -> logla -> oku -> yaz.
+        - 'sentinelboard\.(collector|parser|engine|ml|alerts)\.'
+        # CasaOS saniyede bir /v1/notify/system_status POST'u atiyor.
+        # Guvenlik degeri yok, baseline'i sisiriyor.
+        - '\scasaos[\w-]*(\[[0-9]+\])?:'
 
     - name: nginx_access
       path: /var/log/nginx/access.log

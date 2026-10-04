@@ -17,6 +17,7 @@ Base Collector — Tüm log collector'ların türediği temel sınıf.
   collector.stop()    → izlemeyi durdurur
 """
 
+import re
 import abc
 import json
 import logging
@@ -49,6 +50,28 @@ class BaseCollector(abc.ABC):
         self.redis = redis_client
         self.running = False
         self.stream_key = "sentinelboard:raw_logs"  # Redis stream adı
+        self._ignore_patterns = [re.compile(p) for p in (config.get("ignore") or [])]
+        self.ignored_count = 0
+
+    def should_ignore(self, line: str) -> bool:
+        """
+        Satır yapılandırmadaki eleme desenlerinden birine uyuyor mu?
+
+        Neden ham satıra bakıyoruz, parse edilmiş olaya değil?
+            Elenecek satır için parse maliyetini hiç ödememek
+            istiyoruz. Saniyede binlerce satırda fark ediyor.
+
+        Neden sayaç tutuyoruz?
+            Sessizce veri düşüren bir SIEM tehlikelidir. Ne kadar
+            satırın elendiği görünür olmalı ki filtre fazla geniş
+            kaldığında fark edebilesin.
+        """
+        if not self._ignore_patterns:
+            return False
+        if any(p.search(line) for p in self._ignore_patterns):
+            self.ignored_count += 1
+            return True
+        return False
 
     @abc.abstractmethod
     def parse_line(self, line: str) -> dict | None:

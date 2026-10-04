@@ -53,6 +53,7 @@ logger = logging.getLogger("sentinelboard.collector.worker")
 
 DEFAULT_CONFIG = os.path.join(BASE_DIR, "config", "settings.yaml")
 POLL_INTERVAL = 1.0  # saniye — dosyaları ne sıklıkta yoklayalım
+STATS_INTERVAL = 300   # Kaç saniyede bir özet logu yazılsın
 
 # config'teki "type" değeri → hangi collector sınıfı
 COLLECTOR_TYPES = {
@@ -213,10 +214,13 @@ def main():
     logger.info(f"Collector started with {len(watchers)} source(s)")
 
     total = 0
+    last_stats = time.time()
     try:
         while running["value"]:
             for collector, tailer in watchers:
                 for line in tailer.read_new_lines():
+                    if collector.should_ignore(line):
+                        continue
                     parsed = collector.parse_line(line)
                     if parsed:
                         collector.emit(parsed)
@@ -224,6 +228,18 @@ def main():
 
             if args.once:
                 break
+
+            # Periyodik özet: kaç olay geçti, kaçı elendi.
+            # Sessizce veri düşüren bir collector tehlikelidir —
+            # filtrenin fazla geniş kaldığını buradan fark edersin.
+            if time.time() - last_stats >= STATS_INTERVAL:
+                ignored = {
+                    c.get_source_name(): c.ignored_count
+                    for c, _ in watchers if c.ignored_count
+                }
+                logger.info(f"Emitted: {total}, filtered: {ignored or 'none'}")
+                last_stats = time.time()
+
             time.sleep(POLL_INTERVAL)
     finally:
         for collector, tailer in watchers:
