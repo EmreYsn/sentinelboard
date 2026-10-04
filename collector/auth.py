@@ -24,21 +24,11 @@ import re
 import logging
 
 from collector.base import BaseCollector
+from collector.syslogfmt import split_syslog_line
 from collector.timeparse import parse_syslog_timestamp
 
 logger = logging.getLogger("sentinelboard.collector.auth")
 
-
-# ── Syslog satırının ortak iskeleti ──────────────────────────
-# "Jun  9 14:23:01 vps sshd[12345]: mesaj"
-#  └─ tarih ──┘ └host┘ └proc┘└pid┘   └mesaj┘
-SYSLOG_RE = re.compile(
-    r"^(?P<ts>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+"
-    r"(?P<host>\S+)\s+"
-    r"(?P<process>[\w\-/.]+)"
-    r"(?:\[(?P<pid>\d+)\])?:\s*"
-    r"(?P<message>.*)$"
-)
 
 # ── sshd mesaj desenleri ─────────────────────────────────────
 # "invalid user" ibaresi opsiyonel: olmayan bir kullanıcıya giriş
@@ -59,9 +49,19 @@ INVALID_USER_RE = re.compile(
 )
 
 # Bağlantı kapandı — tarama botlarının tipik izi
+# Iki varyant: kullanici adiyla veya sadece IP ile
+#   "Connection closed by authenticating user root 1.2.3.4 port 5 [preauth]"
+#   "Connection closed by 1.2.3.4 port 23054"
 CONN_CLOSED_RE = re.compile(
-    r"Connection closed by (?:authenticating |invalid )?user (?P<user>\S+) "
+    r"Connection (?:closed|reset) by (?:authenticating |invalid )?(?:user (?P<user>\S+) )?"
     r"(?P<src_ip>[\d.a-fA-F:]+) port (?P<src_port>\d+)"
+)
+
+# PAM katmanindan gelen kimlik dogrulama hatasi.
+# sshd'nin "Failed password" satirindan ayri olarak yazilir ve
+# bazen tek basina gorunur (ornegin baglanti erken kapandiginda).
+PAM_AUTH_FAIL_RE = re.compile(
+    r"authentication failure;.*?rhost=(?P<src_ip>[\d.a-fA-F:]+)(?:\s+user=(?P<user>\S+))?"
 )
 
 # ── sudo deseni ──────────────────────────────────────────────
@@ -87,15 +87,15 @@ class AuthCollector(BaseCollector):
         return self.config.get("name", "auth")
 
     def parse_line(self, line: str) -> dict | None:
-        m = SYSLOG_RE.match(line)
-        if not m:
+        parts = split_syslog_line(line)
+        if not parts:
             return None  # syslog formatına uymayan satırı atla
 
-        host = m.group("host")
-        process = m.group("process")
-        pid = int(m.group("pid")) if m.group("pid") else None
-        message = m.group("message")
-        timestamp = parse_syslog_timestamp(m.group("ts"))
+        host = parts["host"]
+        process = parts["process"]
+        pid = parts["pid"]
+        message = parts["message"]
+        timestamp = parse_syslog_timestamp(parts["ts"])
 
         # Her olayın taşıyacağı ortak alanlar
         base = {
@@ -168,6 +168,17 @@ class AuthCollector(BaseCollector):
                 "src_ip": im.group("src_ip"),
                 "src_port": int(port) if port else None,
                 "auth_method": "invalid_user",
+            }
+
+        pm = PAM_AUTH_FAIL_RE.search(message)
+        if pm:
+            return {
+                **base,
+                "event_type": "auth_failure",
+                "severity": "medium",
+                "user": pm.group("user"),
+                "src_ip": pm.group("src_ip"),
+                "auth_method": "pam",
             }
 
         cm = CONN_CLOSED_RE.search(message)

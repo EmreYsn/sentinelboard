@@ -25,18 +25,11 @@ import re
 import logging
 
 from collector.base import BaseCollector
+from collector.syslogfmt import split_syslog_line
 from collector.timeparse import parse_syslog_timestamp
 
 logger = logging.getLogger("sentinelboard.collector.syslog")
 
-
-SYSLOG_RE = re.compile(
-    r"^(?P<ts>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+"
-    r"(?P<host>\S+)\s+"
-    r"(?P<process>[\w\-/.]+)"
-    r"(?:\[(?P<pid>\d+)\])?:\s*"
-    r"(?P<message>.*)$"
-)
 
 # [UFW BLOCK] veya [UFW AUDIT] gibi etiketler
 UFW_TAG_RE = re.compile(r"\[UFW\s+(?P<action>[A-Z]+)\]")
@@ -52,16 +45,16 @@ class SyslogCollector(BaseCollector):
         return self.config.get("name", "syslog")
 
     def parse_line(self, line: str) -> dict | None:
-        m = SYSLOG_RE.match(line)
-        if not m:
+        parts = split_syslog_line(line)
+        if not parts:
             return None
 
-        message = m.group("message")
+        message = parts["message"]
         base = {
-            "timestamp": parse_syslog_timestamp(m.group("ts")),
-            "host": m.group("host"),
-            "process": m.group("process"),
-            "pid": int(m.group("pid")) if m.group("pid") else None,
+            "timestamp": parse_syslog_timestamp(parts["ts"]),
+            "host": parts["host"],
+            "process": parts["process"],
+            "pid": parts["pid"],
             "message": message,
             "raw": line,
         }

@@ -31,10 +31,14 @@ _NGINX_FMT = "%d/%b/%Y:%H:%M:%S %z"
 
 def parse_syslog_timestamp(ts: str, now: datetime | None = None) -> str:
     """
-    Yılsız syslog zaman damgasını ISO 8601 string'e çevirir.
+    Syslog zaman damgasını ISO 8601 string'e çevirir.
+
+    İki biçimi de kabul eder:
+        "2026-10-04T00:00:49.417217+02:00"  → ISO (Ubuntu 23.10+)
+        "Jun  9 14:23:01"                   → klasik BSD (yılsız)
 
     Args:
-        ts: "Jun  9 14:23:01" biçiminde damga
+        ts: Ham zaman damgası
         now: Referans an (test için enjekte edilebilir)
 
     Returns:
@@ -43,8 +47,18 @@ def parse_syslog_timestamp(ts: str, now: datetime | None = None) -> str:
         zamanı yaklaşık olsun.
     """
     now = now or datetime.now(timezone.utc)
+    ts = ts.strip()
+
+    # ISO biçimi zaten istediğimiz formatta: yıl ve saat dilimi dahil.
+    # Tahmin yapmaya gerek yok, doğrudan doğrula ve geri ver.
+    if len(ts) > 4 and ts[4] == "-":
+        try:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).isoformat()
+        except ValueError:
+            return now.isoformat()
+
     try:
-        parsed = datetime.strptime(ts.strip(), _SYSLOG_FMT)
+        parsed = datetime.strptime(ts, _SYSLOG_FMT)
     except ValueError:
         return now.isoformat()
 
