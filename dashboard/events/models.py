@@ -148,6 +148,7 @@ class Alert(models.Model):
     # Hangi IP/kullanıcı tetikledi (hızlı filtreleme için)
     src_ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
     user = models.CharField(max_length=255, null=True, blank=True)
+    group_value = models.CharField(max_length=255, null=True, blank=True, db_index=True)
 
     # Bu alert'i tetikleyen event'ler (many-to-many ilişki)
     # Bir alert birden fazla event'ten oluşabilir

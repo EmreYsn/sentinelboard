@@ -133,23 +133,11 @@ def check_threshold(count: int, operator: str, threshold: int) -> bool:
     return False
 
 
-def is_in_cooldown(rule_id: str, src_ip: str) -> bool:
-    """
-    Bu kural+IP kombinasyonu için yakın zamanda alert üretilmiş mi?
-
-    Son ALERT_COOLDOWN saniye içinde aynı rule_id ve src_ip ile
-    alert varsa True döner → yeni alert üretme.
-
-    Neden buna ihtiyacımız var?
-        Brute force saldırısı devam ediyorsa, matcher her çalıştığında
-        aynı koşul sağlanacak. Cooldown olmadan dakikada 6 alert
-        üretirsin (10 saniyede bir çalışıyorsa). Bu kullanıcıyı
-        boğar ve gerçek tehditleri kaçırmasına neden olur.
-    """
+def is_in_cooldown(rule_id: str, group_value: str) -> bool:
     cooldown_start = timezone.now() - timedelta(seconds=ALERT_COOLDOWN)
     return Alert.objects.filter(
         rule_id=rule_id,
-        src_ip=src_ip,
+        group_value=str(group_value),
         created_at__gte=cooldown_start,
     ).exists()
 
@@ -241,6 +229,8 @@ def evaluate_rule(rule: SigmaRule) -> list[Alert]:
             severity=rule.level,
             message=message,
             src_ip=group_value if group_by == "src_ip" else None,
+            user=group_value if group_by == "user" else None,
+            group_value=str(group_value),
             tags=rule.tags,
             status="new",
         )
