@@ -57,6 +57,7 @@ logger = logging.getLogger("sentinelboard.ml.worker")
 # ── Ayarlar ──
 WINDOW_MINUTES = 10           # Her pencere kaç dakika
 CHECK_INTERVAL = 60           # Kaç saniyede bir kontrol et
+ALERT_COOLDOWN = 1800         # Aynı anomali için tekrar bildirim arası (30 dk)
 BASELINE_PATH = os.path.join(project_root, "ml", "models", "baseline.json")
 BASELINE_HOURS = 24           # Baseline için kaç saatlik veri kullan
 RETRAIN_INTERVAL = 3600 * 6   # Kaç saniyede bir baseline güncelle (6 saat)
@@ -95,10 +96,36 @@ def build_anomaly_message(result, window_start, window_end) -> str:
     return "\n".join(lines)
 
 
+def is_in_cooldown() -> bool:
+    """
+    Son ALERT_COOLDOWN saniye içinde zaten bir ML anomali alert'i
+    üretildiyse True döner → yenisini üretme.
+
+    Neden gerekli?
+        Anomali bir anlık olay değil, bir durumdur. Saldırı 20 dakika
+        sürüyorsa her kontrol turunda (60 saniyede bir) aynı sapma
+        görülür. Cooldown olmadan tek bir olay için 20 ayrı bildirim
+        gider; analist bir süre sonra bildirimlere bakmayı bırakır ve
+        asıl kritik olanı kaçırır. Engine tarafında aynı koruma
+        rule_id + src_ip bazında zaten var.
+    """
+    cooldown_start = timezone.now() - timedelta(seconds=ALERT_COOLDOWN)
+    return Alert.objects.filter(
+        rule_id="ml-anomaly",
+        created_at__gte=cooldown_start,
+    ).exists()
+
+
 def create_ml_alert(result, window_start, window_end):
     """
     ML anomali sonucundan Alert kaydı oluşturur ve Telegram'a gönderir.
+
+    Cooldown süresi dolmadıysa hiçbir şey yapmaz ve None döner.
     """
+    if is_in_cooldown():
+        logger.info("ML anomaly detected but still in cooldown, skipping alert")
+        return None
+
     message = build_anomaly_message(result, window_start, window_end)
 
     # Hangi feature en çok sapmış? Severity'yi ona göre belirle
@@ -189,8 +216,9 @@ def main():
                 result = detector.predict(fv.to_list())
 
                 if result.is_anomaly:
-                    create_ml_alert(result, window_start, window_end)
-                    total_anomalies += 1
+                    # Cooldown aktifse alert üretilmez, sayacı da artırmayalım
+                    if create_ml_alert(result, window_start, window_end):
+                        total_anomalies += 1
 
             # Periyodik baseline güncelleme
             elapsed = time.time() - last_retrain
