@@ -180,12 +180,12 @@ def extract_features(window_start, window_end) -> FeatureVector:
     # Şüpheli istekler: extra JSON'daki is_suspicious field'ı
     suspicious = events.filter(extra__is_suspicious=True).count()
 
-    # 4xx hatalar: status_code extra'da saklanıyor
-    # Django JSON lookup: extra__status_code__gte=400
+    # 4xx hatalar: durum kodu extra JSON'inda "http_status" adiyla duruyor.
+    # (Collector'daki alan adi bu — "status_code" degil.)
     http_4xx = events.filter(
         event_type="http_request",
-        extra__status_code__gte=400,
-        extra__status_code__lt=500,
+        extra__http_status__gte=400,
+        extra__http_status__lt=500,
     ).count()
 
     # ── Firewall metrikleri ──
