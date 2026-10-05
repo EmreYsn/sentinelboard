@@ -46,3 +46,4 @@ Thumbs.db
 # Coverage reports
 htmlcov/
 .coverage
+ml/models/*.json
