@@ -35,6 +35,9 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+EVENT_RETENTION_DAYS = int(os.getenv("EVENT_RETENTION_DAYS", 90))
+ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", 365))
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Django 4+ HTTPS POST'larında Origin'i bu listeyle karşılaştırır.
