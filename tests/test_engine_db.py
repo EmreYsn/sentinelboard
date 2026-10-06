@@ -181,3 +181,54 @@ def test_prune_dry_run_hicbir_sey_silmez(settings):
     call_command("prune_events", "--dry-run", stdout=StringIO())
 
     assert Event.objects.count() == onceki, "dry-run veri silmemeli"
+
+
+# ── Yeni kurallar: kalicilik ve yetki yukseltme ──────────────
+
+def test_user_added_tek_olayda_tetiklenir():
+    """
+    Esigi 0 olan kural: TEK bir kullanici olusturma olayi bile
+    alert uretmeli. Digerleri "cok sayida X" arar, bu aramaz.
+    """
+    kural = _kural("sentinel-005")
+    _olay("user_added", user="arkakapi", severity="medium", source="auth")
+
+    alertler = evaluate_rule(kural)
+    assert len(alertler) == 1, "Tek kullanici olusturma olayi alert uretmeliydi"
+    assert alertler[0].user == "arkakapi"
+    assert alertler[0].severity == "critical"
+
+
+def test_user_added_olay_yoksa_tetiklenmez():
+    """Esik 0 diye bos pencerede alert uretmemeli."""
+    kural = _kural("sentinel-005")
+    assert evaluate_rule(kural) == []
+
+
+def test_sudo_failure_tetiklenir():
+    kural = _kural("sentinel-006")
+    _olay("sudo_failure", user="yetkisiz", severity="high")
+
+    alertler = evaluate_rule(kural)
+    assert len(alertler) == 1
+    assert alertler[0].user == "yetkisiz"
+
+
+def test_kural_kendi_cooldown_suresini_kullanir():
+    """
+    sentinel-005 cooldown'i 1 saat. Alert 10 dakika once uretilmis
+    olsa bile tekrar uretilmemeli — motorun 5 dakikalik varsayilani
+    degil, kuralin kendi suresi gecerli olmali.
+    """
+    kural = _kural("sentinel-005")
+    assert kural.cooldown == "1h", "Kural dosyasinda cooldown tanimli olmali"
+
+    _olay("user_added", user="arkakapi")
+    assert len(evaluate_rule(kural)) == 1
+
+    # Varsayilan cooldown (5dk) disina, kural cooldown'i (1s) icine tasi
+    Alert.objects.update(created_at=timezone.now() - timedelta(minutes=10))
+
+    assert evaluate_rule(kural) == [], (
+        "Kuralin kendi cooldown suresi yok sayildi — motor varsayilani kullaniyor"
+    )

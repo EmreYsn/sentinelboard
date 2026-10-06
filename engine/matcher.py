@@ -133,8 +133,8 @@ def check_threshold(count: int, operator: str, threshold: int) -> bool:
     return False
 
 
-def is_in_cooldown(rule_id: str, group_value: str) -> bool:
-    cooldown_start = timezone.now() - timedelta(seconds=ALERT_COOLDOWN)
+def is_in_cooldown(rule_id: str, group_value: str, seconds: int = ALERT_COOLDOWN) -> bool:
+    cooldown_start = timezone.now() - timedelta(seconds=seconds)
     return Alert.objects.filter(
         rule_id=rule_id,
         group_value=str(group_value),
@@ -210,7 +210,9 @@ def evaluate_rule(rule: SigmaRule) -> list[Alert]:
             continue  # Bu grup eşiği aşmamış
 
         # Cooldown kontrolü
-        if group_value and is_in_cooldown(rule.id, str(group_value)):
+        # Kural kendi cooldown suresini tanimlamissa onu kullan.
+        cooldown_sn = parse_timeframe(rule.cooldown) if rule.cooldown else ALERT_COOLDOWN
+        if group_value and is_in_cooldown(rule.id, str(group_value), cooldown_sn):
             logger.debug(
                 f"Rule {rule.id}: cooldown active for {group_value}, skipping"
             )

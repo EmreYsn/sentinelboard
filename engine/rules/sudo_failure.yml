@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────
+# Failed Sudo Attempt
+# ─────────────────────────────────────────────────────────────
+# Başarısız sudo denemesi üç şeyden biri demektir:
+#   1) Kullanıcı parolasını yanlış yazdı (zararsız, nadir)
+#   2) Sudo yetkisi olmayan bir hesap yetki yükseltmeye çalışıyor
+#   3) Ele geçirilmiş bir hesap root olmaya çalışıyor
+#
+# İkinci ve üçüncü ihtimal, bilmek isteyeceğin türden olaylardır.
+# Birincisi de zaten senin kendi hatan olur — yani her iki
+# durumda da alert açıklanabilir bir şey.
+#
+# ssh_brute_force kuralından farkı: orada saldırgan daha KAPIDA.
+# Burada saldırgan ZATEN İÇERİDE ve yükselmeye çalışıyor. İkincisi
+# çok daha acil.
+# ─────────────────────────────────────────────────────────────
+
+title: Failed Sudo Attempt
+id: sentinel-006
+status: active
+description: >
+  Detects failed sudo attempts, which may indicate privilege
+  escalation attempts from an account that already has shell access.
+level: high
+
+tags:
+  - attack.privilege_escalation
+  - attack.t1548
+  - attack.t1548.003
+
+logsource:
+  product: linux
+  service: auth
+
+detection:
+  selection:
+    event_type: sudo_failure
+  condition: selection | count(user) > 0
+  timeframe: 1h
+
+response:
+  alert: true
+  severity: high
+  message: "Failed sudo attempt by {user}"
+  cooldown: 1h
+  actions:
+    - notify_telegram
+    - log_to_dashboard
+
+falsepositives:
+  - Administrator mistyping their password
+
+author: Yasin Emre
+date: 2026/10/06
+references:
+  - https://attack.mitre.org/techniques/T1548/003/

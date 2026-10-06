@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+# New User Account Created
+# ─────────────────────────────────────────────────────────────
+# Bu sunucuda yeni kullanıcı hesabı açılması normal bir olay
+# değildir. Saldırganlar içeri girdikten sonra kalıcılık sağlamak
+# için sıklıkla kendi hesaplarını açar — parola değişse, anahtar
+# iptal edilse bile geri dönebilecekleri bir kapı kalsın diye.
+#
+# Neden eşik 0?
+#   Diğer kurallar "çok sayıda X" arıyor çünkü tek bir olay
+#   gürültü olabilir. Burada tersi: TEK bir olay bile açıklama
+#   gerektirir. Yanlış pozitif riski, kaçırma riskinin yanında
+#   önemsiz.
+#
+# Neden 24 saatlik pencere?
+#   Olayı kaçırmamak için geniş tutuldu; cooldown zaten tekrarı
+#   engelliyor.
+# ─────────────────────────────────────────────────────────────
+
+title: New User Account Created
+id: sentinel-005
+status: active
+description: >
+  Detects creation of a new local user account, a common
+  persistence technique following a successful compromise.
+level: critical
+
+tags:
+  - attack.persistence
+  - attack.t1136
+  - attack.t1136.001
+
+logsource:
+  product: linux
+  service: auth
+
+detection:
+  selection:
+    event_type: user_added
+  condition: selection | count(user) > 0
+  timeframe: 24h
+
+response:
+  alert: true
+  severity: critical
+  message: "New user account created: {user}"
+  cooldown: 1h
+  actions:
+    - notify_telegram
+    - log_to_dashboard
+
+falsepositives:
+  - Deliberate account creation by the administrator
+  - Package installation that creates a system/service account
+
+author: Yasin Emre
+date: 2026/10/06
+references:
+  - https://attack.mitre.org/techniques/T1136/001/

@@ -77,6 +77,12 @@ class SigmaRule:
     condition: str = ""
     timeframe: str = "5m"
 
+    # Bu kural icin alert tekrar araligi ("6h", "1d"...).
+    # Bos birakilirsa motorun varsayilani (ALERT_COOLDOWN) kullanilir.
+    # Neden kural basina? 24 saatlik pencereye bakan bir kural, 5 dakikalik
+    # varsayilan cooldown ile ayni alert'i gun boyu tekrar uretir.
+    cooldown: str = ""
+
     # ── Tepki ──
     response: dict = field(default_factory=dict)
 
@@ -160,6 +166,7 @@ def load_rule_from_file(filepath: str) -> Optional[SigmaRule]:
             selection=detection.get("selection", {}),
             condition=detection.get("condition", ""),
             timeframe=detection.get("timeframe", "5m"),
+            cooldown=data.get("response", {}).get("cooldown", ""),
             response=data.get("response", {}),
             tags=data.get("tags", []),
             falsepositives=data.get("falsepositives", []),
