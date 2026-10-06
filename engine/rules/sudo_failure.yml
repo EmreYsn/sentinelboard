@@ -42,7 +42,7 @@ response:
   alert: true
   severity: high
   message: "Failed sudo attempt by {user}"
-  cooldown: 1h
+  cooldown: 2h
   actions:
     - notify_telegram
     - log_to_dashboard

@@ -44,7 +44,7 @@ response:
   alert: true
   severity: critical
   message: "New user account created: {user}"
-  cooldown: 1h
+  cooldown: 24h
   actions:
     - notify_telegram
     - log_to_dashboard
