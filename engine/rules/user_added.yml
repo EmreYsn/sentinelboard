@@ -44,6 +44,8 @@ response:
   alert: true
   severity: critical
   message: "New user account created: {user}"
+  # Pencere 24 saat; cooldown daha kisa olursa ayni olay
+  # pencereden dusmeden tekrar alert uretir.
   cooldown: 24h
   actions:
     - notify_telegram

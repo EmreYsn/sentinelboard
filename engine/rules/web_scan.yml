@@ -38,6 +38,9 @@ detection:
 response:
   alert: true
   severity: high
+  # Pencere 10 dakika; motorun 5 dakikalik varsayilani ile her tarama
+  # iki alert uretiyordu. Cooldown pencereden kisa olmamali.
+  cooldown: 10m
   message: "Web scanning detected: {count} suspicious requests from {src_ip}"
 
 falsepositives:
