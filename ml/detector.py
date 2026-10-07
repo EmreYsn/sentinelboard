@@ -70,7 +70,13 @@ class AnomalyDetector:
             print("Anomali tespit edildi!")
     """
 
-    def __init__(self, z_threshold: float = 2.5, contamination: float = 0.1):
+    def __init__(
+        self,
+        z_threshold: float = 2.5,
+        contamination: float = 0.1,
+        min_deviation_ratio: float = 0.25,
+        require_agreement: bool = True,
+    ):
         """
         Args:
             z_threshold: Z-score eşiği. Bu değerin üstü = anomali.
@@ -81,9 +87,28 @@ class AnomalyDetector:
             contamination: Isolation Forest'ın "verideki anomali oranı" tahmini.
                 0.1 → verinin %10'u anomali olabilir
                 Gerçek dünyada güvenlik loglarında %5-10 makul.
+
+            min_deviation_ratio: Z-score tek başına yetmez; değer ortalamadan
+                en az max(1, ortalama * bu_oran) kadar da uzaklaşmalı.
+
+                Neden gerekli? Varyansı çok düşük feature'larda z-score
+                patlıyor. auth_successes'in ortalaması 0.035, sapması 0.18;
+                tek bir başarılı giriş z=5 üretiyor. İstatistiksel olarak uç,
+                operasyonel olarak hiçbir şey. Bu şart onu eler, gerçek
+                sıçramaları (70 → 209) elemez.
+
+            require_agreement: True ise Isolation Forest de onaylamadıkça
+                anomali sayılmaz. z-score parametrik (normal dağılım varsayar),
+                Isolation Forest değil; ikisinin aynı anda işaret etmesi
+                tek başına birinin işaret etmesinden çok daha güvenilir.
+
+                Ölçtük: 74 geçmiş alert'in 70'ini z tek başına üretmişti,
+                Isolation Forest bunların sadece 24'ünü doğruluyordu.
         """
         self.z_threshold = z_threshold
         self.contamination = contamination
+        self.min_deviation_ratio = min_deviation_ratio
+        self.require_agreement = require_agreement
 
         # Baseline istatistikleri (fit() ile doldurulur)
         self.means = None       # Her feature'ın ortalaması
@@ -197,13 +222,23 @@ class AnomalyDetector:
         z_anomalies = {}
 
         for i, (z, name) in enumerate(zip(z_scores, self.feature_names)):
-            if abs(z) > self.z_threshold:
-                z_anomalies[name] = {
-                    "value": float(vector[i]),
-                    "mean": float(self.means[i]),
-                    "std": float(self.stds[i]),
-                    "z_score": round(float(z), 2),
-                }
+            if abs(z) <= self.z_threshold:
+                continue
+
+            # Mutlak sapma süzgeci: istatistiksel olarak uç ama pratikte
+            # önemsiz değişiklikleri ele. Düşük varyanslı feature'larda
+            # z-score'un patlamasına karşı koruma.
+            mutlak_fark = abs(float(vector[i]) - float(self.means[i]))
+            esik = max(1.0, abs(float(self.means[i])) * self.min_deviation_ratio)
+            if mutlak_fark <= esik:
+                continue
+
+            z_anomalies[name] = {
+                "value": float(vector[i]),
+                "mean": float(self.means[i]),
+                "std": float(self.stds[i]),
+                "z_score": round(float(z), 2),
+            }
 
         if z_anomalies:
             anomaly_signals += 1
@@ -234,8 +269,14 @@ class AnomalyDetector:
         # Score: anomali sinyallerinin oranı (0.0 - 1.0)
         score = anomaly_signals / total_checks if total_checks > 0 else 0.0
 
-        # En az bir yöntem anomali dediyse → anomali
-        is_anomaly = anomaly_signals > 0
+        # Karar: Isolation Forest varsa ve anlaşma şartı açıksa, İKİ yöntem
+        # de anomali demeli. Tek yöntemin kararı gürültü üretiyordu.
+        # Isolation Forest yoksa (model eğitilememişse) z-score tek başına
+        # karar verir — hiç uyarmamaktansa gürültülü uyarmak yeğdir.
+        if self.require_agreement and self.iso_forest is not None:
+            is_anomaly = anomaly_signals == total_checks
+        else:
+            is_anomaly = anomaly_signals > 0
 
         method = "z_score+isolation_forest" if self.iso_forest else "z_score"
 
