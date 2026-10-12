@@ -396,6 +396,114 @@ def test_yerel_endpoint_tanimi(adres, yerel_mi):
     assert llm_client.is_local_endpoint(adres) is yerel_mi
 
 
+@pytest.fixture
+def yapilandirilmis_llm(monkeypatch):
+    """complete() cagrilabilir hale gelsin.
+
+    Test ortaminda API anahtari yok, bu yuzden complete() istegi hic
+    gondermeden config hatasi donuyor. Asagidaki testler HTTP yanit
+    islemeyi olctugu icin anahtari taklit etmek gerekiyor. Gercek bir
+    ag istegi yok — requests.post her testte ayrica degistiriliyor.
+    """
+    monkeypatch.setattr(llm_client, "API_KEY", "test-anahtari")
+
+
+class SahteYanit:
+    """requests.Response yerine gecen minimal nesne."""
+
+    def __init__(self, status_code, govde="", headers=None, json_data=None):
+        self.status_code = status_code
+        self.text = govde
+        self.headers = headers or {}
+        self._json = json_data
+
+    def json(self):
+        if self._json is None:
+            raise ValueError("gecersiz JSON")
+        return self._json
+
+
+def test_kota_asiminda_ham_json_gosterilmez(monkeypatch, yapilandirilmis_llm):
+    """
+    429 bir ariza degil bir bekleme durumu. Kullaniciya saglayicinin
+    ham JSON'unu basmak hem okunmaz hem de organizasyon kimligi gibi
+    gereksiz ayrinti sizdiriyordu.
+    """
+    govde = (
+        '{"error":{"message":"Rate limit reached for model `qwen` in '
+        'organization `org_01kzeep104egtaqmk0rxrp9874` ... OTPM: Limit 1000"}}'
+    )
+    monkeypatch.setattr(
+        llm_client.requests, "post",
+        lambda *a, **k: SahteYanit(429, govde),
+    )
+    sonuc = llm_client.complete([{"role": "user", "content": "x"}])
+
+    assert sonuc["success"] is False
+    assert "kotasi doldu" in sonuc["error"]
+    assert "org_01kzeep" not in sonuc["error"], (
+        "Saglayicinin ham govdesi kullaniciya gosterilmis"
+    )
+    assert "bir dakika sonra" in sonuc["error"].lower()
+
+
+def test_kota_asiminda_retry_after_kullanilir(monkeypatch, yapilandirilmis_llm):
+    """Saglayici ne kadar bekleneceğini soyluyorsa onu aktar."""
+    monkeypatch.setattr(
+        llm_client.requests, "post",
+        lambda *a, **k: SahteYanit(429, "{}", headers={"Retry-After": "42"}),
+    )
+    sonuc = llm_client.complete([{"role": "user", "content": "x"}])
+    assert "42 saniye" in sonuc["error"]
+
+
+def test_max_tokens_kotaya_gore_kirpilir(monkeypatch, yapilandirilmis_llm):
+    """
+    Groq ucretsiz katmaninda dakikalik output kotasi 1000. max_tokens
+    1500 istenirse tek istek bile butun butceden buyuk olur ve 429
+    doner. Merkezi kirpma bunu engelliyor.
+    """
+    gonderilen = {}
+
+    def yakala(*a, **k):
+        gonderilen.update(k.get("json", {}))
+        return SahteYanit(
+            200, json_data={"choices": [{"message": {"content": "tamam"}}]}
+        )
+
+    monkeypatch.setattr(llm_client.requests, "post", yakala)
+    sonuc = llm_client.complete([{"role": "user", "content": "x"}], max_tokens=1500)
+
+    assert sonuc["success"] is True
+    assert gonderilen["max_tokens"] <= llm_client.MAX_OUTPUT_TOKENS
+    assert gonderilen["max_tokens"] == llm_client.MAX_OUTPUT_TOKENS
+
+
+def test_bozuk_env_degeri_varsayilana_duser():
+    """Hatali LLM_MAX_OUTPUT_TOKENS uygulamayi acilista dusurmemeli."""
+    assert llm_client._int_env("YOK_BOYLE_BIR_DEGISKEN", 800) == 800
+
+
+def test_zaman_asimi_nazik_mesaj_dondurur(monkeypatch, yapilandirilmis_llm):
+    """
+    Timeout'ta kullanici traceback degil anlasilir bir mesaj gormeli.
+
+    Not: bu mesajin gorunebilmesi icin requests timeout'unun gunicorn
+    worker timeout'undan KISA olmasi sart. Esit olduklarinda gunicorn
+    worker'i once olduruyor ve bu dal hic calismiyor (09.10.2026).
+    """
+    import requests as _requests
+
+    def patlat(*a, **k):
+        raise _requests.exceptions.Timeout()
+
+    monkeypatch.setattr(llm_client.requests, "post", patlat)
+    sonuc = llm_client.complete([{"role": "user", "content": "x"}], timeout=60)
+
+    assert sonuc["success"] is False
+    assert "60 saniyede" in sonuc["error"]
+
+
 # ── Gerilemeyi onleyen kaynak kodu kontrolu ──────────────────
 
 def test_alerts_modulleri_raw_alanina_dokunmaz():

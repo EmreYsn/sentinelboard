@@ -82,11 +82,13 @@ def analyze_alert(alert):
     events = alert.related_events.all().order_by("-timestamp")
     prompt = build_analysis_prompt(alert, events)
 
+    # timeout gunicorn'un worker timeout'undan kisa olmali (bkz.
+    # llm_client.complete). Sunucuda gunicorn 120 sn'ye ayarli.
     result = llm_client.complete(
         [{"role": "user", "content": prompt}],
         max_tokens=1500,
         temperature=0.3,
-        timeout=30,
+        timeout=60,
     )
 
     if result["success"]:

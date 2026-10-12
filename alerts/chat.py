@@ -216,7 +216,7 @@ Yukaridaki verilere dayanarak soruyu yanitla."""
         ],
         max_tokens=1000,
         temperature=0.3,
-        timeout=30,
+        timeout=60,  # gunicorn worker timeout'undan kisa olmali
     )
 
     if result["success"]:
@@ -268,7 +268,7 @@ Sadece Turkce yaz. Cok kisa ve oz tut, maksimum 3 cumle."""
         [{"role": "user", "content": prompt}],
         max_tokens=200,
         temperature=0.3,
-        timeout=15,
+        timeout=20,
     )
 
     if result["success"]:

@@ -45,6 +45,31 @@ BASE_URL = (os.getenv("LLM_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
 MODEL = os.getenv("LLM_MODEL") or os.getenv("GROQ_MODEL") or DEFAULT_MODEL
 API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY") or ""
 
+# Üretilecek azami token. Neden merkezi bir sınır var?
+#     Groq'un ucretsiz katmaninda dakikalik output token kotasi (OTPM)
+#     1000. Bir istek max_tokens=1500 isterse tek basina butun dakikalik
+#     butceden buyuk olur ve 429 ile reddedilir. Cagiran taraflar ne
+#     kadar istediklerini soyluyor, burasi tiere gore kirpiyor —
+#     boylece tier degistiginde (ya da yerel modele gecildiginde, ki
+#     orada kota yok) tek bir env degiskeni yetiyor.
+DEFAULT_MAX_OUTPUT_TOKENS = 800
+
+
+def _int_env(isim: str, varsayilan: int) -> int:
+    """Hatali env degeri uygulamayi acilista dusurmemeli."""
+    try:
+        deger = int(os.getenv(isim, ""))
+    except ValueError:
+        return varsayilan
+    return deger if deger > 0 else varsayilan
+
+
+MAX_OUTPUT_TOKENS = _int_env("LLM_MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS)
+
+# HTTP 429: saglayici kota siniri. Ayri ele aliniyor, cunku kullaniciya
+# gosterilecek mesaj bir hata degil bir bekleme talimati.
+RATE_LIMIT_STATUS = 429
+
 
 def resolve_api_url(base_url: str = None) -> str:
     """Taban adresten tam chat/completions adresini üretir.
@@ -104,8 +129,15 @@ def complete(
     Dönüş her zaman aynı şekilde: {"success": bool, "content": str,
     "error": str | None}. Çağıran taraf HTTP ayrıntısıyla uğraşmaz.
 
+    TIMEOUT KURALI — bu değer gunicorn'un worker timeout'undan KISA
+    olmak zorunda. Aksi halde gunicorn worker'ı önce öldürür: kullanıcı
+    502 görür, buradaki nazik hata mesajı hiç çalışmaz, ve daha kötüsü
+    sağlayıcı o ana kadar ürettiği token'ları kotadan düşmüş olur. Yani
+    sessiz başarısızlık kotayı yiyip karşılığında hiçbir şey vermez.
+    Yaşandı: 09.10.2026, iki worker timeout'u arkasından 429.
+
     Yerel modeller ilk istekte modeli diske yükler ve yavaş olabilir;
-    timeout'u çağıran taraf belirliyor.
+    o yüzden timeout'u çağıran taraf belirliyor.
     """
     if not is_configured():
         return {"success": False, "content": "", "error": config_error()}
@@ -114,6 +146,13 @@ def complete(
     if API_KEY:
         headers["Authorization"] = f"Bearer {API_KEY}"
 
+    istenen = min(max_tokens, MAX_OUTPUT_TOKENS)
+    if istenen < max_tokens:
+        logger.debug(
+            f"max_tokens {max_tokens} -> {istenen} olarak kirpildi "
+            f"(LLM_MAX_OUTPUT_TOKENS)"
+        )
+
     try:
         response = requests.post(
             resolve_api_url(),
@@ -121,7 +160,7 @@ def complete(
             json={
                 "model": MODEL,
                 "messages": messages,
-                "max_tokens": max_tokens,
+                "max_tokens": istenen,
                 "temperature": temperature,
             },
             timeout=timeout,
@@ -137,10 +176,34 @@ def complete(
         logger.error(f"LLM baglanti hatasi: {exc}")
         return {"success": False, "content": "", "error": str(exc)}
 
+    if response.status_code == RATE_LIMIT_STATUS:
+        # Kota aşımı bir arıza değil, bir bekleme durumu. Kullanıcıya
+        # sağlayıcının ham JSON'unu göstermek yerine ne yapması
+        # gerektiğini söylüyoruz; teşhis için ham gövde log'a gidiyor.
+        logger.warning(
+            f"LLM kota siniri asildi ({describe()}): {response.text[:300]}"
+        )
+        bekleme = (response.headers.get("Retry-After") or "").strip()
+        if bekleme.isdigit():
+            ek = f"Yaklasik {bekleme} saniye sonra tekrar dene."
+        else:
+            ek = "Bir dakika sonra tekrar dene."
+        return {
+            "success": False,
+            "content": "",
+            "error": f"LLM saglayicisinin kotasi doldu. {ek}",
+        }
+
     if response.status_code != 200:
-        error_msg = f"LLM API hatasi {response.status_code}: {response.text[:200]}"
-        logger.error(error_msg)
-        return {"success": False, "content": "", "error": error_msg}
+        # Ham gövde log'da kalsın; kullanıcıya kısa bilgi yeter.
+        logger.error(
+            f"LLM API hatasi {response.status_code}: {response.text[:300]}"
+        )
+        return {
+            "success": False,
+            "content": "",
+            "error": f"LLM API hatasi {response.status_code}",
+        }
 
     try:
         content = response.json()["choices"][0]["message"]["content"]
