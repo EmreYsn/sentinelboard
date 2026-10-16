@@ -397,7 +397,11 @@ const API_BASE = '/api';
 function severityClass(s) { return `badge badge-${s}`; }
 function statusClass(s) { return `status-badge status-${s}`; }
 function timeAgo(dateStr) {
-    const diff = (Date.now() - new Date(dateStr)) / 1000;
+    // Math.max(0, ...): zaman damgaları sunucuda üretiliyor, bu fonksiyon
+    // tarayıcıda çalışıyor. İki saat arasında birkaç saniye fark olması
+    // normaldir ve damga ileride kalırsa "-13s ago" gibi bozuk bir süre
+    // çıkar. Gelecekteki bir damga "0s ago" görünmeli.
+    const diff = Math.max(0, (Date.now() - new Date(dateStr)) / 1000);
     if (diff < 60) return `${Math.floor(diff)}s ago`;
     if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
