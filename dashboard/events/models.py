@@ -167,6 +167,19 @@ class Alert(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new", db_index=True)
 
+    # ── LLM analizi ──────────────────────────────────────────
+    # Üretilen analiz burada saklanıyor. Saklanmadığı sürece panelde
+    # her "AI" tıklaması sağlayıcıya yeni bir istek gönderiyordu;
+    # aynı alert'i ikinci kez açmak aynı metni yeniden ürettiriyordu.
+    # Groq'un ücretsiz katmanında dakikalık output token kotası 1000,
+    # yani bu israf doğrudan 429'a (kota aşımı) yol açıyordu.
+    llm_analysis = models.TextField(blank=True, default="")
+    llm_analyzed_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def has_analysis(self) -> bool:
+        return bool(self.llm_analysis)
+
     class Meta:
         ordering = ["-created_at"]
 

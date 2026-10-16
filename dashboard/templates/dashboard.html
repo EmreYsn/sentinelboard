@@ -696,18 +696,23 @@ function AlertsTab() {
         } catch (e) { console.error(e); }
     };
 
-    const analyzeAlert = async (id) => {
+    // force=true sadece "Yeniden Analiz Et" butonundan gelir. Kayıtlı
+    // analiz varken sunucu LLM'e hiç gitmez, kota harcanmaz.
+    const analyzeAlert = async (id, force = false) => {
         setAnalyzing(id);
-        setAnalysis(null);
+        if (!force) setAnalysis(null);   // yenilerken eski metin ekranda kalsın
         try {
             const res = await fetch(`${API_BASE}/alerts/${id}/analyze/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ force }),
             });
             const data = await res.json();
-            setAnalysis(data);
+            setAnalysis({ ...data, alertId: id });
+            // Yeni analiz üretildiyse listedeki rozet güncellensin
+            if (data.success && !data.cached) fetchAlerts();
         } catch (e) {
-            setAnalysis({ success: false, error: 'Request failed' });
+            setAnalysis({ success: false, error: 'Request failed', alertId: id });
         }
         setAnalyzing(null);
     };
@@ -744,8 +749,30 @@ function AlertsTab() {
                     }}>
                         <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '14px' }}>
                             🤖 LLM Analysis
+                            {analysis.cached && analysis.analyzed_at && (
+                                <span style={{
+                                    color: 'var(--text-secondary)',
+                                    fontWeight: 400,
+                                    fontSize: '11px',
+                                    marginLeft: '8px',
+                                }}>
+                                    kayıtlı · {timeAgo(analysis.analyzed_at)}
+                                </span>
+                            )}
                         </span>
-                        <button className="action-btn" onClick={() => setAnalysis(null)}>✕ Close</button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            {analysis.success && analysis.alertId && (
+                                <button
+                                    className="action-btn"
+                                    onClick={() => analyzeAlert(analysis.alertId, true)}
+                                    disabled={analyzing === analysis.alertId}
+                                    title="Yeni bir LLM çağrısı yapar ve kayıtlı analizin üzerine yazar"
+                                >
+                                    {analyzing === analysis.alertId ? '...' : '↻ Yeniden Analiz Et'}
+                                </button>
+                            )}
+                            <button className="action-btn" onClick={() => setAnalysis(null)}>✕ Close</button>
+                        </div>
                     </div>
                     {analysis.success ? (
                         <div style={{ color: 'var(--text-primary)' }} dangerouslySetInnerHTML={{ __html: marked.parse(analysis.analysis) }}></div>
@@ -786,8 +813,13 @@ function AlertsTab() {
                                             style={{borderColor: 'var(--accent)', color: 'var(--accent)'}}
                                             onClick={() => analyzeAlert(alert.id)}
                                             disabled={analyzing === alert.id}
+                                            title={alert.has_analysis
+                                                ? 'Kayıtlı analizi açar — yeni LLM çağrısı yapılmaz'
+                                                : 'LLM ile analiz eder'}
                                         >
-                                            {analyzing === alert.id ? '...' : '🤖 AI'}
+                                            {analyzing === alert.id
+                                                ? '...'
+                                                : (alert.has_analysis ? '🤖 AI ✓' : '🤖 AI')}
                                         </button>
                                         {alert.status === 'new' && (
                                             <button className="action-btn" onClick={() => updateStatus(alert.id, 'acknowledged')}>ACK</button>

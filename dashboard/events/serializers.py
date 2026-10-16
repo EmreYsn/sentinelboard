@@ -15,6 +15,10 @@ class EventSerializer(serializers.ModelSerializer):
 
 class AlertSerializer(serializers.ModelSerializer):
     event_count = serializers.SerializerMethodField()
+    # Analiz metninin kendisi listeye konmuyor: 200 alert'lik bir
+    # listede her biri birkaç kilobayt metin taşırsa yanıt şişer.
+    # Panelin listede ihtiyacı olan tek şey analizin VAR olup olmadığı.
+    has_analysis = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Alert
@@ -22,6 +26,7 @@ class AlertSerializer(serializers.ModelSerializer):
             "id", "created_at", "rule_id", "rule_title",
             "severity", "message", "src_ip", "user",
             "tags", "status", "event_count",
+            "has_analysis", "llm_analyzed_at",
         ]
 
     def get_event_count(self, obj):

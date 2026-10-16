@@ -148,6 +148,16 @@ def dashboard_stats(request):
 
 @api_view(["POST"])
 def analyze_alert_view(request, alert_id):
+    """Alert'in LLM analizini döndürür; yoksa üretir ve saklar.
+
+    Neden saklıyoruz? Analiz saklanmadığında aynı alert'i ikinci kez
+    açmak sağlayıcıya yeni bir istek gönderiyor ve aynı metni yeniden
+    ürettiriyordu. Groq'un ücretsiz katmanında dakikalık output token
+    kotası dar olduğu için bu israf doğrudan 429'a yol açıyordu.
+
+    Yeniden analiz isteyen taraf gövdede force=true gönderir; bu
+    bilinçli bir eylem olmalı, kazara tıklama değil.
+    """
     try:
         alert = Alert.objects.get(id=alert_id)
     except Alert.DoesNotExist:
@@ -155,8 +165,30 @@ def analyze_alert_view(request, alert_id):
             {"error": "Alert not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    yeniden = str(request.data.get("force", "")).lower() in ("1", "true", "yes")
+
+    if alert.llm_analysis and not yeniden:
+        return Response({
+            "success": True,
+            "analysis": alert.llm_analysis,
+            "error": None,
+            "cached": True,
+            "analyzed_at": alert.llm_analyzed_at,
+        })
+
     result = analyze_alert(alert)
-    return Response(result)
+
+    if result["success"]:
+        alert.llm_analysis = result["analysis"]
+        alert.llm_analyzed_at = timezone.now()
+        alert.save(update_fields=["llm_analysis", "llm_analyzed_at"])
+
+    return Response({
+        **result,
+        "cached": False,
+        "analyzed_at": alert.llm_analyzed_at,
+    })
 
 @api_view(["POST"])
 def chat_view(request):
