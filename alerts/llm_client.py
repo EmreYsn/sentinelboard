@@ -129,12 +129,26 @@ def complete(
     Dönüş her zaman aynı şekilde: {"success": bool, "content": str,
     "error": str | None}. Çağıran taraf HTTP ayrıntısıyla uğraşmaz.
 
-    TIMEOUT KURALI — bu değer gunicorn'un worker timeout'undan KISA
-    olmak zorunda. Aksi halde gunicorn worker'ı önce öldürür: kullanıcı
-    502 görür, buradaki nazik hata mesajı hiç çalışmaz, ve daha kötüsü
-    sağlayıcı o ana kadar ürettiği token'ları kotadan düşmüş olur. Yani
-    sessiz başarısızlık kotayı yiyip karşılığında hiçbir şey vermez.
-    Yaşandı: 09.10.2026, iki worker timeout'u arkasından 429.
+    TIMEOUT KURALI (TERS PİRAMİT) — istek iç içe geçmiş ÜÇ zaman
+    aşımından geçiyor. En içteki en kısa olmak zorunda; dışa doğru her
+    katman daha uzun:
+
+        requests (burası)        60 sn
+        Gunicorn --timeout      120 sn
+        nginx proxy_read_timeout 180 sn
+
+    Sıra bozulursa hata buradaki hata yönetimine ulaşmadan dışarıdan
+    kesilir: kullanıcı anlamsız bir 502/504 görür, aşağıdaki nazik
+    mesaj hiç çalışmaz ve daha kötüsü sağlayıcı o ana kadar ürettiği
+    token'ları kotadan düşmüş olur — sessiz başarısızlık kotayı yiyip
+    karşılığında hiçbir şey vermez.
+
+    İki kez yaşandı:
+      09.10.2026 — Gunicorn 30 sn ile yarıştı, iki worker timeout'u
+                   arkasından 429 (kota bitti).
+      16.10.2026 — nginx'in VARSAYILAN proxy_read_timeout değeri de
+                   60 sn; bu katman ilk düzeltmede atlanmıştı ve bu
+                   sefer 504 döndü.
 
     Yerel modeller ilk istekte modeli diske yükler ve yavaş olabilir;
     o yüzden timeout'u çağıran taraf belirliyor.
